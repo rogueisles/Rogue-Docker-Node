@@ -1,244 +1,85 @@
-# 🪨 OGG Node — Docker Hub Setup
+# Rogue Network — Docker node
 
-Ogg make easy path.
-No build from source. No cave headache. No compile pain.
-Pull image. Run node. Cave connected.
+Official RGN node image for the FORGE mainnet upgrade at block **1,100,100**.
 
-**This setup runs a full Ogg node with:**
-- RPC open on port `18545`
-- P2P peer connection on port `30303`
-- Persistent chain data — survives restarts
-- Automatic restart if server reboots
-- Bootnodes hardcoded — peers connect automatically
+- Chain/network ID: **70088**.
+- Same binary as the verified Linux v3.0.0 release.
+- Persistent data, automatic peer connections and restart support.
+- Ordinary nodes need no wallet, DGB/DOGE daemon or signer service.
+- Historical rules/rewards apply through block **1,100,099**.
 
----
-
-## 📋 Requirements
-
-| Requirement | Minimum |
-|---|---|
-| OS | Ubuntu 20.04 / 22.04 / 24.04 |
-| RAM | 4 GB |
-| CPU | 2 cores |
-| Disk | 100 GB SSD |
-| Docker | 20.x or higher |
-| Ports | 18545 (RPC), 30303 (P2P) |
-
----
-
-## 1️⃣ Install Docker
-
-First — give server the tools it needs.
+## Run a regular node
 
 ```bash
-sudo apt update
-sudo apt install -y docker.io docker-compose
-sudo systemctl enable docker
-sudo systemctl start docker
-```
+docker pull roguenetwork/rogue-network:3.0.0
 
-Verify Docker is running:
-
-```bash
-docker --version
-```
-
----
-
-## 2️⃣ Pull Ogg Node Image
-
-Pull latest Ogg node image from Docker Hub.
-
-```bash
-docker pull oggcoin/ogg-node:latest
-```
-
-Image downloaded. Cave blueprint ready.
-
----
-
-## 3️⃣ Start Node
-
-### Full Node / Exchange (No Mining)
-
-```bash
 docker run -d \
-  --name ogg-node \
+  --name rgn-node \
   --restart unless-stopped \
-  -p 18545:18545 \
+  --stop-timeout 120 \
+  -p 127.0.0.1:18545:18545 \
   -p 30303:30303/tcp \
   -p 30303:30303/udp \
-  -v $(pwd)/egem-data:/root/egem-data \
-  oggcoin/ogg-node:latest
+  -v rgn-data:/var/lib/rgn \
+  roguenetwork/rogue-network:3.0.0
 ```
 
-Node starts in background. Chain data saved to `egem-data` folder. Cave open.
+The named volume `rgn-data` persists across container replacement. The node runs
+as UID/GID **10001**. For a host-directory mount, arrange ownership before use;
+do not point a second process at an existing running node database.
 
-### Solo Miner
+RPC is available on the host at `http://127.0.0.1:18545`. The example keeps it
+local to the server. Public P2P uses TCP/UDP **30303**. HTTP modules are
+`eth,net,web3`; administrative and wallet-unlock modules are not exposed.
 
-Add your wallet address with `-e WALLET=`:
+## Check the node
 
 ```bash
-docker run -d \
-  --name ogg-node \
-  --restart unless-stopped \
-  -e WALLET=0xYourWalletAddress \
-  -p 18545:18545 \
-  -p 30303:30303/tcp \
-  -p 30303:30303/udp \
-  -v $(pwd)/egem-data:/root/egem-data \
-  oggcoin/ogg-node:latest
-```
+docker logs -f rgn-node
+docker exec rgn-node python3 /opt/rgn/docker/health.py
 
-Replace `0xYourWalletAddress` with your OGG wallet address. Mining rewards go directly to that wallet.
-
----
-
-## 4️⃣ Check Logs
-
-Watch node startup logs:
-
-```bash
-docker logs -f ogg-node
-```
-
-Healthy startup looks like this:
-
-```
-Initializing chain data...
-ChainID: 70088
-RPC opened on 18545
-peers connected
-blocks syncing
-```
-
-> Press `CTRL + C` to exit log view. Node keeps running.
-
----
-
-## 5️⃣ Check RPC
-
-Confirm RPC is alive and responding:
-
-```bash
-curl -s -X POST http://127.0.0.1:18545 \
-  -H "Content-Type: application/json" \
+curl -s http://127.0.0.1:18545 \
+  -H 'Content-Type: application/json' \
   --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'
 ```
 
-Expected response:
-
-```json
-{"jsonrpc":"2.0","id":1,"result":"0x81"}
-```
-
-JSON response means RPC is working. Node is ready.
-
----
-
-## 6️⃣ Check Peers and Sync
-
-Check connected peers:
+The local health check verifies the exact mainnet genesis and consensus
+configuration. Full synchronization additionally requires connected peers and
+a height matching the canonical network. `eth_syncing=false` at height zero
+does not prove that a newly started node is caught up.
 
 ```bash
-curl -s -X POST http://127.0.0.1:18545 \
-  -H "Content-Type: application/json" \
-  --data '{"jsonrpc":"2.0","method":"net_peerCount","params":[],"id":1}'
+docker stop -t 120 rgn-node
+docker start rgn-node
+docker restart -t 120 rgn-node
 ```
 
-Check sync status:
+## Wallet selection and solo mining
 
-```bash
-curl -s -X POST http://127.0.0.1:18545 \
-  -H "Content-Type: application/json" \
-  --data '{"jsonrpc":"2.0","method":"eth_syncing","params":[],"id":1}'
-```
+The optional `WALLET=0xYourPublicRGNAddress` setting selects the RGN work
+beneficiary for compatible external FORGE mining software. It does **not**
+start a complete solo miner. No private key is required by the node.
 
-Check current block:
+FORGE solo mining also requires a Scrypt mining adapter, own DigiByte and/or
+Dogecoin native backend, and automatic approvals from the approved **2-of-4**
+signing services. The complete solo stack is separate and is not included in
+this node image. Do not reuse old ProgPoW wallet-only mining instructions.
 
-```bash
-curl -s -X POST http://127.0.0.1:18545 \
-  -H "Content-Type: application/json" \
-  --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'
-```
+## Release identity
 
-**Healthy node:**
+Linux/AMD64 image, based on Ubuntu22.04. Source:
+https://github.com/rogueisles/Rogue-Network
 
-| Check | Expected |
-|---|---|
-| `net_peerCount` | `0x2` or higher — peers found |
-| `eth_blockNumber` | Increasing — blocks arriving |
-| `eth_syncing` | `false` — fully synced |
+Source commit: `18367e0aea25899af7fe8d608f0a19fa420740a9`.
 
-> If `eth_syncing` still shows progress — node is catching up. Let it finish.
+Node binary SHA256:
+`896166f853530bf74e2282e9950097801e5d88b5d306a6a639ce05f7d243cf05`.
 
----
+The inherited executable name/version banner is `egem` / `1.0.3-syrius`;
+release commit and checksum identify this build. The runtime explicitly selects
+network70088. Normal state garbage collection is enabled; this does not bound
+all historical block storage. Plan SSD capacity for a growing chain database.
 
-## 7️⃣ Stop / Start / Restart
-
-Stop node:
-```bash
-docker stop ogg-node
-```
-
-Start node:
-```bash
-docker start ogg-node
-```
-
-Restart node:
-```bash
-docker restart ogg-node
-```
-
-Remove container (chain data stays safe):
-```bash
-docker stop ogg-node && docker rm ogg-node
-```
-
-> Chain data stays safe in `egem-data` folder. Container gone — data not gone. Run again anytime.
-
----
-
-## 🪨 Useful Commands
-
-| Action | Command |
-|---|---|
-| View logs | `docker logs -f ogg-node` |
-| Running containers | `docker ps` |
-| Check RPC | `curl -s -X POST http://127.0.0.1:18545 -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'` |
-| Stop node | `docker stop ogg-node` |
-| Restart node | `docker restart ogg-node` |
-| Remove container | `docker stop ogg-node && docker rm ogg-node` |
-
----
-
-## ✅ Node Ready Checklist
-
-```
-Docker installed        ✓
-Image pulled            ✓
-Node running            ✓
-RPC alive               ✓
-Peers connected         ✓
-Chain syncing           ✓
-```
-
-Cave connected. Rock is ready.
-
----
-
-## 🔗 Links
-
-| | |
-|---|---|
-| 🌐 Website | https://oggcoin.org |
-| 📖 Docs | https://oggcoin.gitbook.io/the-book-of-ogg |
-| ⛏️ Mining Pool | https://pool.oggcoin.org |
-| 💬 Telegram | https://t.me/proveyouogg |
-| 🐦 Twitter/X | https://x.com/oggchain |
-| 🎮 Discord | https://discord.gg/VrBQz7upZb |
-
----
-
-🪨 **Node running. Chain syncing. Cave connected.**
+Version `3.0.0` is the fixed release tag. `latest` is a convenience alias.
+Release notes and native Linux download:
+https://github.com/rogueisles/Rogue-Network/releases/tag/v3.0.0
