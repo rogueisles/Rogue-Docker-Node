@@ -1,85 +1,48 @@
-# Rogue Network — Docker node
+# Rogue Network Docker 4.1.0
 
-Official RGN node image for the FORGE mainnet upgrade at block **1,100,100**.
+**Required FORGE V5 upgrade before block 1,121,800.** Every validator/exchange must
+install the same release/profile; pools must also update their adapter and guards.
+The clock estimate is 27 October 2026 around 13:35 UTC. Activation follows block height.
 
-- Chain/network ID: **70088**.
-- Same binary as the verified Linux v3.0.0 release.
-- Persistent data, automatic peer connections and restart support.
-- Ordinary nodes need no wallet, DGB/DOGE daemon or signer service.
-- Historical rules/rewards apply through block **1,100,099**.
-
-## Run a regular node
-
-```bash
-docker pull roguenetwork/rogue-network:3.0.0
-
-docker run -d \
-  --name rgn-node \
-  --restart unless-stopped \
-  --stop-timeout 120 \
-  -p 127.0.0.1:18545:18545 \
-  -p 30303:30303/tcp \
-  -p 30303:30303/udp \
-  -v rgn-data:/var/lib/rgn \
-  roguenetwork/rogue-network:3.0.0
+```sh
+docker pull roguenetwork/rogue-network:4.1.0
+docker volume create rgn-data
+docker run -d --name rgn-node --restart unless-stopped --stop-timeout 120 \
+  -p 127.0.0.1:18545:18545 -p 30303:30303/tcp -p 30303:30303/udp \
+  -v rgn-data:/var/lib/rgn roguenetwork/rogue-network:4.1.0
 ```
 
-The named volume `rgn-data` persists across container replacement. The node runs
-as UID/GID **10001**. For a host-directory mount, arrange ownership before use;
-do not point a second process at an existing running node database.
+When upgrading, stop the old container gracefully and reuse its existing data
+volume. Back up configuration and wallet custody. Do not delete the volume or
+chain database. Keep RPC private. Non-root UID/GID 10001; bind mounts must already
+be writable by that account. A named volume prepares ownership automatically.
 
-RPC is available on the host at `http://127.0.0.1:18545`. The example keeps it
-local to the server. Public P2P uses TCP/UDP **30303**. HTTP modules are
-`eth,net,web3`; administrative and wallet-unlock modules are not exposed.
+The image pins the binary and approved mainnet profile. Original genesis/history
+and per-block rewards remain unchanged. V4 applies below 1,121,800; V5 and its
+12.5-second target apply from that height. SOQ is optional mining work and regular
+validators do not run native full nodes. WALLET selects a public beneficiary;
+it does not launch a complete miner.
 
-## Check the node
-
-```bash
+```sh
 docker logs -f rgn-node
 docker exec rgn-node python3 /opt/rgn/docker/health.py
-
-curl -s http://127.0.0.1:18545 \
-  -H 'Content-Type: application/json' \
-  --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'
 ```
 
-The local health check verifies the exact mainnet genesis and consensus
-configuration. Full synchronization additionally requires connected peers and
-a height matching the canonical network. `eth_syncing=false` at height zero
-does not prove that a newly started node is caught up.
+The local health check verifies the exact identity/profile and responsiveness.
+Also check peer connections, syncing status and height against the network.
+`eth_syncing=false` at height zero is not proof of completed synchronization.
 
-```bash
-docker stop -t 120 rgn-node
-docker start rgn-node
-docker restart -t 120 rgn-node
-```
-
-## Wallet selection and solo mining
-
-The optional `WALLET=0xYourPublicRGNAddress` setting selects the RGN work
-beneficiary for compatible external FORGE mining software. It does **not**
-start a complete solo miner. No private key is required by the node.
-
-FORGE solo mining also requires a Scrypt mining adapter, own DigiByte and/or
-Dogecoin native backend, and automatic approvals from the approved **2-of-4**
-signing services. The complete solo stack is separate and is not included in
-this node image. Do not reuse old ProgPoW wallet-only mining instructions.
-
-## Release identity
-
-Linux/AMD64 image, based on Ubuntu22.04. Source:
+Build the same payload image with `docker build -t roguenetwork/rogue-network:4.1.0 .`.
+Complete source and source-build Dockerfile:
 https://github.com/rogueisles/Rogue-Network
+Native binary release:
+https://github.com/rogueisles/Rogue-Node/releases/tag/v4.1.0
+Pool/operator guide:
+https://github.com/rogueisles/Mining-Pool
 
-Source commit: `18367e0aea25899af7fe8d608f0a19fa420740a9`.
+Read release notes and qualification scope before deployment. After V5 blocks
+exist, retain V5 validation; restoring a V4-only image is unsafe.
 
-Node binary SHA256:
-`896166f853530bf74e2282e9950097801e5d88b5d306a6a639ce05f7d243cf05`.
+[Approved activation profile and generated review](config/MAINNET-V5-RELEASE.md).
 
-The inherited executable name/version banner is `egem` / `1.0.3-syrius`;
-release commit and checksum identify this build. The runtime explicitly selects
-network70088. Normal state garbage collection is enabled; this does not bound
-all historical block storage. Plan SSD capacity for a growing chain database.
-
-Version `3.0.0` is the fixed release tag. `latest` is a convenience alias.
-Release notes and native Linux download:
-https://github.com/rogueisles/Rogue-Network/releases/tag/v3.0.0
+The 4.1.0 packaging retains the tested node's internal build identifier `rgn400v5`. This identifier is opaque; the release version, scheduled profile and published checksums identify this package.
